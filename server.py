@@ -1,51 +1,58 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
-import yt_dlp, os
+import yt_dlp
+import time
+import random
 
 app = Flask(__name__)
-CORS(app)
 
-@app.route('/')
+@app.route("/")
 def home():
-    return jsonify({'status': 'ok', 'service': 'ToolKit Pro YT-DLP API'})
+    return "Backend running"
 
-@app.route('/api/download', methods=['GET'])
-def get_download():
-    url     = request.args.get('url', '')
-    quality = request.args.get('quality', '720')
-    fmt     = request.args.get('format', 'mp4')
+@app.route("/api/download")
+def download():
+    url = request.args.get("url")
 
     if not url:
-        return jsonify({'error': 'URL required'}), 400
+        return jsonify({"error": "No URL provided"})
 
     try:
-        if fmt == 'mp3':
-            format_sel = 'bestaudio[ext=m4a]/bestaudio'
-        elif quality == 'best':
-            format_sel = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-        else:
-            format_sel = f'bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<={quality}][ext=mp4]/best'
+        # random delay (anti-spam)
+        time.sleep(random.uniform(1, 3))
 
         ydl_opts = {
-            'quiet': True,
-            'format': format_sel
+            "format": "best",
+            "quiet": True,
+            "noplaylist": True,
+
+            # 🔥 MOST IMPORTANT (429 fix attempt)
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept-Language": "en-US,en;q=0.9"
+            },
+
+            # retry logic
+            "retries": 3,
+            "fragment_retries": 3,
+
+            # network tuning
+            "socket_timeout": 15,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
-            dl_url = info.get('url') or (info.get('requested_formats') or [{}])[0].get('url', '')
+            # best direct URL
+            video_url = info.get("url")
 
             return jsonify({
-                'url': dl_url,
-                'title': info.get('title', 'video'),
-                'ext': fmt
+                "title": info.get("title"),
+                "duration": info.get("duration"),
+                "url": video_url
             })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)})
 
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))  # 5000 → 10000 better for Render
-    app.run(host='0.0.0.0', port=port)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
